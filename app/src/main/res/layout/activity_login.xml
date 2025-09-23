@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:background="@drawable/login_screen"
+        android:padding="32dp">
+
+        <EditText
+            android:id="@+id/nameInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="@string/edit_log"
+            android:background="@android:drawable/edit_text"
+            android:fontFamily="@font/oswald_regular"
+            android:alpha="0.75"
+            android:inputType="textPersonName" />
+
+        <Button
+            android:id="@+id/loginButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Начать путешествие!"
+            android:fontFamily="@font/oswald_regular"
+            android:background="@drawable/rounded_button_log"
+            android:textSize="14sp"
+            android:alpha="0.8"
+            android:paddingLeft="16dp"
+            android:paddingRight="16dp"
+            android:paddingTop="10dp"
+            android:paddingBottom="8dp"
+            android:layout_marginTop="10dp" />
+    </LinearLayout>
+
+    <!-- Логотип поверх всего -->
+    <ImageView
+        android:layout_width="267dp"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:layout_marginBottom="185dp"
+        android:scaleType="fitCenter"
+        android:src="@drawable/start_log" />
+
+</FrameLayout>
