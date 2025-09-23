@@ -19,10 +19,12 @@ import android.content.pm.PackageManager
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import android.Manifest
+import android.net.Uri
 import android.os.Build
 import android.text.TextUtils
 import android.util.Log
 import android.view.View
+import android.view.ViewGroup
 import android.view.animation.AnimationUtils
 import androidx.activity.result.contract.ActivityResultContracts.RequestPermission
 import androidx.lifecycle.Lifecycle
@@ -38,6 +40,7 @@ import androidx.work.Constraints
 import androidx.work.NetworkType
 import java.util.concurrent.TimeUnit
 import android.view.animation.Animation
+import android.widget.FrameLayout
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -54,10 +57,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private var permissionGranted = false
     private val oswaldBold by lazy { ResourcesCompat.getFont(this, R.font.oswald_bold) }
-
     private var rotationAnimations = mutableMapOf<View, Animation>()
-
     private lateinit var viewModel: MainViewModel
+
+    private lateinit var feedbackButton: ImageView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -76,7 +79,7 @@ class MainActivity : AppCompatActivity() {
 
         animateElements()
         checkAndRequestNotificationPermission()
-
+        createFeedbackButton()
         setupButtonListeners()
     }
 
@@ -101,6 +104,7 @@ class MainActivity : AppCompatActivity() {
         binding.deleteButton.setOnClickListener { deleteSelectedTasks() }
         binding.completeButton.setOnClickListener { completeSelectedTasks() }
         binding.logoutButton.setOnClickListener { logout() }
+        binding.feedbackButton.setOnClickListener {}
     }
 
     private fun observeViewModelEvents() {
@@ -254,7 +258,8 @@ class MainActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             // Только для Android 13+ требуется разрешение
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
-                PackageManager.PERMISSION_GRANTED) {
+                PackageManager.PERMISSION_GRANTED
+            ) {
                 requestNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
             } else {
                 permissionGranted = true
@@ -323,7 +328,8 @@ class MainActivity : AppCompatActivity() {
             tasks.add(task)
             updateTaskList()
             saveTasks()
-            Toast.makeText(this, "Сёгун, ваша задача успешно запланирована!", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Сёгун, ваша задача успешно запланирована!", Toast.LENGTH_SHORT)
+                .show()
             scheduleTaskNotification(task, selectedTime)
         }
 
@@ -350,7 +356,11 @@ class MainActivity : AppCompatActivity() {
             }
             .setNegativeButton("Нет") { dialog, _ ->
                 dialog.dismiss()
-                Toast.makeText(this, "Сёгун, задачана добавлена без напоминания!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    this,
+                    "Сёгун, задачана добавлена без напоминания!",
+                    Toast.LENGTH_SHORT
+                ).show()
                 // Задача добавляется без напоминания
                 tasks.add(task)
                 updateTaskList()
@@ -443,17 +453,17 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateTaskList() {
         binding.tContainer.removeAllViews()
-            for ((_, task) in tasks.withIndex()) {
-                val taskLayout = createTaskView(task)
-                val layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply {
-                    topMargin = resources.getDimensionPixelSize(R.dimen.task_margin)
-                }
-                binding.tContainer.addView(taskLayout, layoutParams)
+        for ((_, task) in tasks.withIndex()) {
+            val taskLayout = createTaskView(task)
+            val layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = resources.getDimensionPixelSize(R.dimen.task_margin)
             }
+            binding.tContainer.addView(taskLayout, layoutParams)
         }
+    }
 
     private fun createTaskView(task: Task): LinearLayout {
         val taskLayout = LinearLayout(this).apply {
@@ -477,9 +487,11 @@ class MainActivity : AppCompatActivity() {
                         this.alpha = 0.25f
                         this.isEnabled = false
                     }
+
                     task.isSelected -> {
                         setImageResource(R.drawable.ic_electro_active)
                     }
+
                     else -> {
                         setImageResource(R.drawable.ic_electro_off)
                     }
@@ -569,15 +581,15 @@ class MainActivity : AppCompatActivity() {
                 startRotationAnimation(icon)
             }
 
-                else -> {
-                    // Обычная задача
-                    icon.setImageResource(R.drawable.ic_electro_off)
-                    icon.alpha = 1.0f
-                    icon.isEnabled = true
-                    startRotationAnimation(icon)
-                }
+            else -> {
+                // Обычная задача
+                icon.setImageResource(R.drawable.ic_electro_off)
+                icon.alpha = 1.0f
+                icon.isEnabled = true
+                startRotationAnimation(icon)
             }
         }
+    }
 
     private fun loadTasks() {
         val userName = sharedPreferences.getString("user_name", "default_user")
@@ -585,7 +597,8 @@ class MainActivity : AppCompatActivity() {
         tasks.clear()
         for (i in 0 until count) {
             val text = sharedPreferences.getString("${userName}_task_text_$i", "")
-            val isCompleted = sharedPreferences.getBoolean("${userName}_task_is_completed_$i", false)
+            val isCompleted =
+                sharedPreferences.getBoolean("${userName}_task_is_completed_$i", false)
             val isSelected = sharedPreferences.getBoolean("${userName}_task_is_selected_$i", false)
             val reminder = sharedPreferences.getLong("${userName}_task_reminder_$i", 0L)
 
@@ -632,5 +645,58 @@ class MainActivity : AppCompatActivity() {
         updateTaskList()
         saveTasks()
         Toast.makeText(this, "Задачи завершены!", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun createFeedbackButton() {
+        feedbackButton = ImageView(this).apply {
+
+            val size = 56.dpToPx()
+            layoutParams = FrameLayout.LayoutParams(size, size).apply {
+                gravity = android.view.Gravity.BOTTOM or android.view.Gravity.END
+                setMargins(0, 0, 16.dpToPx(), 16.dpToPx())
+            }
+
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            contentDescription = "Обратная связь"
+
+            setOnClickListener {
+                showFeedbackDialog()
+            }
+        }
+
+        val rootView = findViewById<View>(android.R.id.content) as ViewGroup
+        rootView.addView(feedbackButton)
+    }
+
+    private fun showFeedbackDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("Обратная связь")
+            .setMessage("Напиши нам на почту!")
+            .setPositiveButton("Написать") { _, _ ->
+                openGoogleForms()
+            }
+            .setNegativeButton("Отмена", null)
+            .show()
+    }
+
+    private fun openGoogleForms() {
+        val formUrl = "https://docs.google.com/forms/d/e/your-form-id/viewform" +
+                "?usp=pp_url&entry.7024429=${getAppVersion()}" +  // Замени 123456789 на ID поля
+                "&entry.941118847=${Build.MODEL}"       // Замени 987654321 на ID поля
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(formUrl))
+        startActivity(intent)
+    }
+
+    private fun Int.dpToPx(): Int {
+        return (this * resources.displayMetrics.density).toInt()
+    }
+
+    private fun getAppVersion(): String {
+        return try {
+            val packageInfo = packageManager.getPackageInfo(packageName, 0)
+            packageInfo.versionName ?: "Неизвестная"
+        } catch (e: Exception) {
+            "Неизвестная"
+        }
     }
 }
