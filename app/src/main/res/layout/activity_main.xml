@@ -17,6 +17,10 @@
         android:layout_height="match_parent"
         android:background="#40000000" />  <!-- ✅ 25% чёрный overlay -->
 
+    <com.example.archonsquests.SakuraPetalView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
     <!-- Все остальные элементы -->
     <FrameLayout
         android:layout_width="match_parent"
@@ -131,11 +135,20 @@
         android:scaleType="centerInside"
         android:background="@drawable/exit" />
 
+    <ProgressBar
+        android:id="@+id/updateProgressBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:visibility="gone"
+        style="?android:attr/progressBarStyleHorizontal" />
+
     <ImageView
         android:id="@+id/feedbackButton"
-        android:layout_width="75dp"
-        android:layout_height="75dp"
+        android:layout_width="85dp"
+        android:layout_height="85dp"
         android:layout_gravity="bottom|end"
         android:layout_margin="16dp"
         android:src="@drawable/feedback" /> <!-- Замени на своё изображение -->
+
 </FrameLayout>

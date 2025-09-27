@@ -6,8 +6,8 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import ru.rustore.sdk.appupdate.errors.RuStoreInstallException
@@ -15,6 +15,7 @@ import ru.rustore.sdk.appupdate.listener.InstallStateUpdateListener
 import ru.rustore.sdk.appupdate.manager.RuStoreAppUpdateManager
 import ru.rustore.sdk.appupdate.manager.factory.RuStoreAppUpdateManagerFactory
 import ru.rustore.sdk.appupdate.model.AppUpdateOptions
+import ru.rustore.sdk.appupdate.model.AppUpdateInfo
 import ru.rustore.sdk.appupdate.model.InstallStatus
 import ru.rustore.sdk.appupdate.model.UpdateAvailability
 import ru.rustore.sdk.appupdate.model.AppUpdateType
@@ -25,14 +26,15 @@ import ru.rustore.sdk.core.exception.RuStoreUserUnauthorizedException
 class MainViewModel : ViewModel() {
     private lateinit var ruStoreAppUpdateManager: RuStoreAppUpdateManager
     private var isInitialized = false
+    private var pendingUpdateInfo: AppUpdateInfo? = null
 
     // Кэширование раз в 4 часа
     private var lastUpdateCheck: Long = 0
-    private val UPDATE_CHECK_INTERVAL = 4 * 60 * 60 * 1000L  // 4 часа
+    private val updateCheckInterval = 4 * 60 * 60 * 1000L // 4 часа
 
     // Автоматическая очистка при 100 запросах
     private var updateCheckCounter: Int = 0
-    private val MAX_UPDATE_CHECKS = 100  // Максимум 100 проверок
+    private val maxUpdateChecks = 100
 
     private val TAG = "MainViewModel"
 
@@ -92,9 +94,9 @@ class MainViewModel : ViewModel() {
         lastUpdateCheck = System.currentTimeMillis()
         updateCheckCounter++
 
-        if (updateCheckCounter >= MAX_UPDATE_CHECKS) {
+        if (updateCheckCounter >= maxUpdateChecks) {
             resetCounters()
-            Log.d(TAG, "Сброшены счётчики проверок ($MAX_UPDATE_CHECKS)")
+            Log.d(TAG, "Сброшены счётчики проверок ($maxUpdateChecks)")
         }
 
         viewModelScope.launch(Dispatchers.IO) {
@@ -121,11 +123,12 @@ class MainViewModel : ViewModel() {
         }
     }
 
-    private suspend fun handleUpdateInfo(appUpdateInfo: ru.rustore.sdk.appupdate.model.AppUpdateInfo) {
+    private suspend fun handleUpdateInfo(appUpdateInfo: AppUpdateInfo) {
         if (appUpdateInfo.updateAvailability == UpdateAvailability.UPDATE_AVAILABLE) {
             try {
+                pendingUpdateInfo = appUpdateInfo
                 ruStoreAppUpdateManager.registerListener(installStateUpdateListener)
-                _events.emit(Event.UpdateAvailable(appUpdateInfo))
+                _events.emit(Event.UpdateAvailable)
             } catch (e: Exception) {
                 Log.e(TAG, "Ошибка обработки обновления", e)
                 viewModelScope.launch {
@@ -137,20 +140,25 @@ class MainViewModel : ViewModel() {
         }
     }
 
-    fun startFlexibleUpdate(appUpdateInfo: ru.rustore.sdk.appupdate.model.AppUpdateInfo) {
+    fun startFlexibleUpdate() {
+        val updateInfo = pendingUpdateInfo ?: run {
+            viewModelScope.launch {
+                _events.emit(Event.Error("Информация об обновлении утеряна"))
+            }
+            return
+        }
+
         viewModelScope.launch(Dispatchers.Main) {
             try {
                 val options = AppUpdateOptions.Builder()
                     .appUpdateType(AppUpdateType.FLEXIBLE)
                     .build()
-
-                ruStoreAppUpdateManager.startUpdateFlow(appUpdateInfo, options)
+                ruStoreAppUpdateManager.startUpdateFlow(updateInfo, options)
                     .addOnSuccessListener { resultCode ->
                         when (resultCode) {
                             Activity.RESULT_OK -> {
                                 Log.d(TAG, "Обновление начато")
                             }
-
                             Activity.RESULT_CANCELED -> {
                                 Log.w(TAG, "Пользователь отменил обновление")
                                 viewModelScope.launch {
@@ -177,6 +185,7 @@ class MainViewModel : ViewModel() {
             }
             return
         }
+
         viewModelScope.launch(Dispatchers.Main) {
             try {
                 ruStoreAppUpdateManager.completeUpdate(
@@ -221,12 +230,13 @@ class MainViewModel : ViewModel() {
         }
 
         val timePassed = now - lastUpdateCheck
-        return timePassed > UPDATE_CHECK_INTERVAL
+        return timePassed > updateCheckInterval
     }
 
     private fun resetCounters() {
         lastUpdateCheck = 0
         updateCheckCounter = 0
+        pendingUpdateInfo = null
         Log.d(TAG, "Счётчики проверок обновлений сброшены")
     }
 
@@ -259,7 +269,7 @@ class MainViewModel : ViewModel() {
     }
 
     sealed class Event {
-        data class UpdateAvailable(val appUpdateInfo: ru.rustore.sdk.appupdate.model.AppUpdateInfo) : Event()
+        object UpdateAvailable : Event()
         object UpdateDownloaded : Event()
         object UpdateCompleted : Event()
         object UpdateCancelled : Event()

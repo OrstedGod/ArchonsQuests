@@ -19,7 +19,6 @@ import android.content.pm.PackageManager
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import android.Manifest
-import android.net.Uri
 import android.os.Build
 import android.text.TextUtils
 import android.util.Log
@@ -31,7 +30,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.launch
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
@@ -41,6 +39,9 @@ import androidx.work.NetworkType
 import java.util.concurrent.TimeUnit
 import android.view.animation.Animation
 import android.widget.FrameLayout
+import android.widget.ProgressBar
+import androidx.core.graphics.toColorInt
+import androidx.core.net.toUri
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -59,8 +60,8 @@ class MainActivity : AppCompatActivity() {
     private val oswaldBold by lazy { ResourcesCompat.getFont(this, R.font.oswald_bold) }
     private var rotationAnimations = mutableMapOf<View, Animation>()
     private lateinit var viewModel: MainViewModel
-
     private lateinit var feedbackButton: ImageView
+    private lateinit var updateProgressBar: ProgressBar
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -76,7 +77,7 @@ class MainActivity : AppCompatActivity() {
 
         // Провекрка имени пользователя
         handleUserLogin()
-
+        createUpdateProgressBar()
         animateElements()
         checkAndRequestNotificationPermission()
         createFeedbackButton()
@@ -113,7 +114,7 @@ class MainActivity : AppCompatActivity() {
                 viewModel.events.collect { event ->
                     when (event) {
                         is MainViewModel.Event.UpdateAvailable -> {
-                            showUpdateDialog(event.appUpdateInfo)
+                           showUpdateDialog()
                         }
 
                         is MainViewModel.Event.DownloadProgress -> {
@@ -121,6 +122,7 @@ class MainActivity : AppCompatActivity() {
                         }
 
                         is MainViewModel.Event.UpdateDownloaded -> {
+                            hideUpdateProgress()
                             showInstallReadyDialog()
                         }
 
@@ -129,6 +131,7 @@ class MainActivity : AppCompatActivity() {
                         }
 
                         is MainViewModel.Event.Error -> {
+                            hideUpdateProgress()
                             showError(event.message ?: "Произошла неизвестная ошибка")
                         }
 
@@ -137,6 +140,7 @@ class MainActivity : AppCompatActivity() {
                         }
 
                         is MainViewModel.Event.UpdateCancelled -> {
+                            hideUpdateProgress()
                             showToast("Обновление отменено пользователем")
                         }
 
@@ -154,18 +158,45 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun showUpdateDialog(appUpdateInfo: ru.rustore.sdk.appupdate.model.AppUpdateInfo) {
+    private fun showUpdateDialog() {
         AlertDialog.Builder(this)
             .setTitle("🌟 Доступно обновление!")
             .setMessage("Установите новую версию Archon's Quests?")
             .setPositiveButton("Обновить") { _, _ ->
-                viewModel.startFlexibleUpdate(appUpdateInfo)
+                viewModel.startFlexibleUpdate()
             }
             .setNegativeButton("Позже") { dialog, _ ->
                 dialog.dismiss()
             }
             .setCancelable(false)
             .show()
+    }
+
+    private fun createUpdateProgressBar() {
+        updateProgressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                24.dpToPx() // Высота 24dp
+            ).apply {
+                setMargins(16.dpToPx(), 16.dpToPx(), 16.dpToPx(), 16.dpToPx())
+            }
+            visibility = View.GONE
+            max = 100 // 100%
+            progress = 0
+        }
+
+        // Добавляем в tContainer (или в нужное место)
+        binding.tContainer.addView(updateProgressBar)
+    }
+
+    private fun showDownloadProgress(progress: Int) {
+        updateProgressBar.visibility = View.VISIBLE
+        updateProgressBar.progress = progress
+    }
+
+    private fun hideUpdateProgress() {
+        updateProgressBar.visibility = View.GONE
+        updateProgressBar.progress = 0
     }
 
     private fun showInstallReadyDialog() {
@@ -194,15 +225,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun showToast(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
-    }
-
-    private fun showDownloadProgress(progress: Int) {
-        // Можно использовать Snackbar или ProgressDialog
-        Snackbar.make(
-            findViewById(android.R.id.content),
-            "Загрузка обновления: $progress%",
-            Snackbar.LENGTH_SHORT
-        ).show()
     }
 
     private fun animateElements() {
@@ -474,11 +496,11 @@ class MainActivity : AppCompatActivity() {
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             )
-            setPadding(20, 10, 20, 10)
+            setPadding(16, 8, 16, 8)
         }
 
         val icon = ImageView(this).apply {
-            layoutParams = LinearLayout.LayoutParams(69, 69)
+            layoutParams = LinearLayout.LayoutParams(60, 60)
             setOnClickListener {
                 task.isSelected = !task.isSelected
                 when {
@@ -504,7 +526,7 @@ class MainActivity : AppCompatActivity() {
 
         // Создаём контейнер для текста и времени
         val textAndTimeContainer = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
+            orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(
                 0,
                 LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -515,12 +537,12 @@ class MainActivity : AppCompatActivity() {
 
         // Основной текст задачи
         val textView = TextView(this).apply {
-            setTextColor(Color.parseColor("#FFFFFF"))
+            setTextColor("#FFFFFF".toColorInt())
             text = task.text
-            textSize = 22f
+            textSize = 18f
             typeface = oswaldBold
-            setPadding(20, 0, 16, 0)
-            maxLines = 3
+            setPadding(12, 0, 0, 0)
+            maxLines = 2
             ellipsize = TextUtils.TruncateAt.END
 
             if (task.isCompleted) {
@@ -532,11 +554,11 @@ class MainActivity : AppCompatActivity() {
 
         // Время напоминания — немного правее текста
         val reminderTextView = TextView(this).apply {
-            setTextColor(Color.parseColor("#CCCCCC"))
-            textSize = 16f
+            setTextColor("#CCCCCC".toColorInt())
+            textSize = 14f
             typeface = oswaldBold
             gravity = android.view.Gravity.START
-            setPadding(10, 0, 0, 0) // небольшой отступ слева
+            setPadding(12, 4, 0, 0) // небольшой отступ слева
             if (task.isCompleted) {
                 paint.isStrikeThruText = true
                 alpha = 0.25f
@@ -649,7 +671,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun createFeedbackButton() {
         feedbackButton = ImageView(this).apply {
-
             val size = 56.dpToPx()
             layoutParams = FrameLayout.LayoutParams(size, size).apply {
                 gravity = android.view.Gravity.BOTTOM or android.view.Gravity.END
@@ -657,7 +678,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             scaleType = ImageView.ScaleType.CENTER_CROP
-            contentDescription = "Обратная связь"
+            contentDescription = "Оникабуто сообщит мне твои идеи!"
 
             setOnClickListener {
                 showFeedbackDialog()
@@ -670,9 +691,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun showFeedbackDialog() {
         AlertDialog.Builder(this)
-            .setTitle("Обратная связь")
-            .setMessage("Напиши нам на почту!")
-            .setPositiveButton("Написать") { _, _ ->
+            .setTitle("Оникабуто сообщит мне твои идеи!")
+            .setMessage("Заполните форму ниже, чтобы мы могли улучшить наше приложение!")
+            .setPositiveButton("Заполнить форму") { _, _ ->
                 openGoogleForms()
             }
             .setNegativeButton("Отмена", null)
@@ -680,10 +701,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openGoogleForms() {
-        val formUrl = "https://docs.google.com/forms/d/e/your-form-id/viewform" +
+        val formUrl = "https://docs.google.com/forms/d/e/1FAIpQLSfszJoTUrWzw5up5bYuL3ROtITkQ5Pl6P1VC-9f9_oE0Q-Z3w/viewform?usp=header" +
                 "?usp=pp_url&entry.7024429=${getAppVersion()}" +  // Замени 123456789 на ID поля
                 "&entry.941118847=${Build.MODEL}"       // Замени 987654321 на ID поля
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(formUrl))
+        val intent = Intent(Intent.ACTION_VIEW, formUrl.toUri())
         startActivity(intent)
     }
 
